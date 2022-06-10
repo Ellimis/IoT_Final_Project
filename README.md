@@ -2,7 +2,7 @@
 IoT 네트워크 기말 프로젝트 - 암호화폐 모니터링 시스템
 
 ## 1일차
-[생각한 형태 생성]
+[생각한 초기 형태]<br>
 ![image](https://user-images.githubusercontent.com/67461878/171183709-cf64e52f-e371-46db-885e-80cfa393f78b.png)
 
 ## 2일차
