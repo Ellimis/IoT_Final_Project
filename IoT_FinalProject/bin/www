@@ -1,0 +1,161 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+ var app = require('../app');
+ var debug = require('debug')('iotserver:server');
+ var http = require('http');
+ 
+ /**
+  * Get port from environment and store in Express.
+  */
+ 
+ var port = normalizePort(process.env.PORT || '3000');
+ app.set('port', port);
+ 
+ /**
+  * Create HTTP server.
+  */
+ 
+ var server = http.createServer(app);
+ 
+ // Connect Mongo DB 
+ var mongoDB = require("mongodb").MongoClient;
+ var url = "mongodb://localhost:27017";
+ var dbObj = null;
+ 
+ mongoDB.connect(url, function(err, db) {
+   dbObj = db;
+   console.log("MongoDB Connected.");
+ });
+  
+  /**
+   * MQTT subscriber (MQTT Server connection & Read resource data)
+   */
+ var mqtt = require("mqtt");
+ const { stringify } = require('querystring');
+ const { send } = require('process');
+ var client = mqtt.connect("mqtt://127.0.0.1")
+ 
+ client.on("connect", function(){
+   client.subscribe("bit");
+   console.log("Subscribing bit");
+   client.subscribe("ether");
+   console.log("Subscribing etherium");
+ })
+ 
+ // MQTT 응답 메세지 수신시 동작
+ client.on("message", function(topic, message){
+   console.log(topic+ ": " + message.toString()); // 수신한 메세지 Topic 출력
+   var obj = JSON.parse(message); // 수신한 메세지의 데이터를 obj 저장
+   obj.create_at = new Date(); // 현재 날짜 데이터를 obj에 추가함.
+   console.log(obj);
+   // 토픽이 비트코인일떄
+   if (topic == "bit"){ 
+     var cursor = dbObj.db("Resources").collection("Bitcoin");
+     cursor.insertOne(obj, function(err, result){
+       if(err){console.log(err);}
+       else{console.log(JSON.stringify(result));}
+     });
+   }
+   // 토픽이 이더리움일때
+   else if (topic == "ether"){ 
+     var cursor = dbObj.db("Resources").collection("Etherium");
+     cursor.insertOne(obj, function(err, result){
+       if(err){console.log(err);}
+       else{console.log(JSON.stringify(result));}
+     });
+   }
+ });
+   
+ var arrayTest;
+ // get data from MongDB and then send it to HTML page using socket
+ // Mongo DB에서 최근 데이터 불러와서, HTML 페이지에 업데이트
+ var io = require("socket.io")(server);
+ io.on("connection", function(socket){
+   socket.on("event_update", function(data){
+     var cursor = dbObj.db("Resources").collection("Bitcoin");
+     var options = {sort:{"_id":-1}, projection: {_id:0, bit:1, create_at:1},};
+     var sending_data =cursor.find({},options).limit(1);
+     sending_data.toArray(function(err,results){
+       if(!err){
+         socket.emit("event_send_bit", JSON.stringify(results[0]));
+       }
+     }); 
+     var cursor = dbObj.db("Resources").collection("Etherium");
+     var options = {sort:{"_id":-1}, projection: {_id:0, ether:1, create_at:1},};
+     var sending_data =cursor.find({},options).limit(1);
+     sending_data.toArray(function(err,results){
+       if(!err){
+         socket.emit("event_send_ether", JSON.stringify(results[0]));
+       }
+     }); 
+   });
+ });
+  
+  
+  /**
+   * Listen on provided port, on all network interfaces.
+   */
+  server.listen(port);
+  server.on('error', onError);
+  server.on('listening', onListening);
+  
+  /**
+   * Normalize a port into a number, string, or false.
+   */
+  function normalizePort(val) {
+    var port = parseInt(val, 10);
+    if (isNaN(port)) {
+      // named pipe
+      return val;
+    }
+    if (port >= 0) {
+      // port number
+      return port;
+    }
+    return false;
+  }
+  
+  /**
+   * Event listener for HTTP server "error" event.
+   */
+  
+  function onError(error) {
+    if (error.syscall !== 'listen') {
+      throw error;
+    }
+  
+    var bind = typeof port === 'string'
+      ? 'Pipe ' + port
+      : 'Port ' + port;
+  
+    // handle specific listen errors with friendly messages
+    switch (error.code) {
+      case 'EACCES':
+        console.error(bind + ' requires elevated privileges');
+        process.exit(1);
+        break;
+      case 'EADDRINUSE':
+        console.error(bind + ' is already in use');
+        process.exit(1);
+        break;
+      default:
+        throw error;
+    }
+  }
+  
+  /**
+   * Event listener for HTTP server "listening" event.
+   */
+  
+  function onListening() {
+    var addr = server.address();
+    var bind = typeof addr === 'string'
+      ? 'pipe ' + addr
+      : 'port ' + addr.port;
+    debug('Listening on ' + bind);
+  }
+  
